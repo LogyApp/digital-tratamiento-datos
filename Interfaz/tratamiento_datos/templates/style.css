@@ -1,0 +1,118 @@
+body {
+    background: #fff;
+    font-family: Arial, sans-serif;
+    margin: 0;
+    padding: 0;
+    min-height: 100vh;
+}
+
+.page {
+    width: 794px;
+    min-height: 1123px;
+    background: #fff;
+    margin: 0 auto;
+    padding: 40px 50px;
+    box-shadow: none;
+    color: #000;
+    box-sizing: border-box;
+}
+
+.header-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 11px;
+}
+
+.header-table td {
+    border: 1px solid #000;
+    vertical-align: middle;
+}
+
+.logo {
+    width: 25%;
+    text-align: center;
+}
+
+.logo img {
+    max-height: 50px;
+}
+
+.title {
+    width: 50%;
+    text-align: center;
+    font-weight: bold;
+}
+
+.meta {
+    width: 25%;
+    padding: 0;
+}
+
+.meta div {
+    border-bottom: 1px solid #000;
+    text-align: center;
+    padding: 4px 0;
+}
+
+.meta div:last-child {
+    border-bottom: none;
+}
+
+h3 {
+    text-align: center;
+    font-size: 14px;
+    margin: 20px 0;
+}
+
+p {
+    font-size: 12px;
+    text-align: justify;
+    line-height: 1.4;
+    margin: 6px 0;
+}
+
+.bold {
+    font-weight: bold;
+}
+
+.button-container {
+    text-align: right;
+    margin-top: 20px;
+    margin-bottom: 20px;
+}
+
+.btn-classic {
+    background: #e0e0e0;
+    border: 2px outset #ffffff;
+    border-color: #ffffff #808080 #808080 #ffffff;
+    padding: 8px 20px;
+    font-family: 'Courier New', monospace;
+    font-size: 14px;
+    font-weight: bold;
+    color: #000000;
+    cursor: pointer;
+    box-shadow: 1px 1px 2px rgba(0, 0, 0, 0.3);
+    text-transform: uppercase;
+    letter-spacing: 1px;
+}
+
+.btn-classic:hover {
+    background: #c0c0c0;
+    border-color: #808080 #ffffff #ffffff #808080;
+}
+
+.btn-classic:active {
+    border-color: #808080 #ffffff #ffffff #808080;
+    transform: translate(1px, 1px);
+    box-shadow: none;
+}
+
+.btn-classic:disabled {
+    background: #a0a0a0;
+    border-color: #808080 #808080 #808080 #808080;
+    color: #666666;
+    cursor: not-allowed;
+    transform: none;
+    box-shadow: none;
+    opacity: 0.7;
+}
