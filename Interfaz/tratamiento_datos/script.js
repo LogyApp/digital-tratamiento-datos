@@ -11,7 +11,7 @@ let firmaRealizada = false;
 
 const btnGuardar = document.getElementById('btnGuardar');
 
-const API_BASE_URL = 'http://localhost:8080/api';
+const API_BASE_URL = 'https://digital-tratamiento-datos-594761951101.europe-west1.run.app/api';
 
 document.addEventListener('DOMContentLoaded', async () => {
     await obtenerUsuarios();
