@@ -56,7 +56,7 @@ class SignatureController {
 
             // PASO 4: VERIFICAR si el empleado existe
             console.log('4️⃣ Verificando empleado en BD...');
-            const empleadoExistente = await employeeService.getEmployeeByidentificacion(identificacion);
+            const empleadoExistente = await employeeService.getEmployeeByIdentificacion(identificacion);
 
             if (empleadoExistente) {
                 // ACTUALIZAR URLs
@@ -88,7 +88,7 @@ class SignatureController {
             }
 
             // VERIFICAR que se guardó correctamente
-            const verificar = await employeeService.getEmployeeByidentificacion(identificacion);
+            const verificar = await employeeService.getEmployeeByIdentificacion(identificacion);
             console.log('✅ REGISTRO FINAL EN BD:', {
                 lugar_expedicion: verificar?.lugar_expedicion,
                 ciudad_firma: verificar?.ciudad_firma,
@@ -168,7 +168,7 @@ class SignatureController {
 
             // Verificar BD
             try {
-                const testQuery = await employeeService.getEmployeeByidentificacion('test');
+                const testQuery = await employeeService.getEmployeeByIdentificacion('test');
                 services.database = true;
             } catch (e) {
                 console.error('BD no disponible:', e.message);

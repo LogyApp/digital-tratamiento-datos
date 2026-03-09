@@ -1,3 +1,5 @@
+// script.js
+
 const hoy = new Date();
 const meses = ["enero", "febrero", "marzo", "abril", "mayo", "junio",
     "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre"];
@@ -10,8 +12,11 @@ let usuarios = {};
 let firmaRealizada = false;
 
 const btnGuardar = document.getElementById('btnGuardar');
+const firmaCanvas = document.getElementById('firma');
 
 const API_BASE_URL = 'https://digital-tratamiento-datos-594761951101.europe-west1.run.app/api';
+// 'http://localhost:8080/api'
+
 
 document.addEventListener('DOMContentLoaded', async () => {
     await obtenerUsuarios();
@@ -26,6 +31,16 @@ documento.addEventListener("change", async () => {
             const usuario = usuarios[identificacion];
             nombre.value = usuario.nombre_completo || '';
             lugarExp.value = usuario.lugar_expedicion || '';
+
+            // 🔥 DIRECTAMENTE verificamos si tiene firma_url
+            if (usuario.firma_url) {
+                console.log('✅ Firma encontrada:', usuario.firma_url);
+                cargarFirmaDesdeDatos(usuario.firma_url);
+            } else {
+                console.log('ℹ️ No hay firma guardada');
+                limpiarFirma();
+            }
+
             firma.style.pointerEvents = "auto";
             verificarEstadoBoton();
         } else {
@@ -34,17 +49,133 @@ documento.addEventListener("change", async () => {
     } else {
         nombre.value = "";
         lugarExp.value = "";
+        limpiarFirma();
         firma.style.pointerEvents = "none";
         firmaRealizada = false;
         verificarEstadoBoton();
     }
 });
 
+async function cargarFirmaDesdeDatos(firmaUrl) {
+    if (!firmaUrl) {
+        limpiarFirma();
+        return;
+    }
+
+    console.log('🖼️ Cargando imagen desde:', firmaUrl);
+    const ctx = firmaCanvas.getContext('2d');
+
+    try {
+        const response = await fetch(firmaUrl, {
+            mode: 'cors',
+            credentials: 'omit',
+            headers: {
+                'Origin': window.location.origin
+            }
+        });
+
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+
+        const blob = await response.blob();
+        const blobUrl = URL.createObjectURL(blob);
+
+        const img = new Image();
+
+        const timeout = setTimeout(() => {
+            console.error('⏰ Timeout cargando imagen');
+            URL.revokeObjectURL(blobUrl);
+            limpiarFirma();
+        }, 5000);
+
+        img.onload = function () {
+            clearTimeout(timeout);
+            console.log('✅ Imagen cargada exitosamente');
+            ctx.clearRect(0, 0, firmaCanvas.width, firmaCanvas.height);
+            ctx.drawImage(img, 0, 0, firmaCanvas.width, firmaCanvas.height);
+            URL.revokeObjectURL(blobUrl);
+
+            // 🔥 NUEVO: Marcar que hay una firma cargada (no dibujada por el usuario)
+            firmaCargada = true;
+            firmaRealizada = true; // La firma existe (aunque sea cargada)
+            verificarEstadoBoton();
+        };
+
+        img.onerror = function (err) {
+            clearTimeout(timeout);
+            console.error('❌ Error cargando imagen:', err);
+            URL.revokeObjectURL(blobUrl);
+            limpiarFirma();
+        };
+
+        img.src = blobUrl;
+
+    } catch (error) {
+        console.error('❌ Error en fetch CORS:', error);
+
+        // Fallback directo
+        const img = new Image();
+        const timestamp = new Date().getTime();
+
+        img.crossOrigin = 'anonymous';
+        img.setAttribute('crossorigin', 'anonymous');
+
+        const timeout = setTimeout(() => {
+            console.error('⏰ Timeout en fallback');
+            limpiarFirma();
+        }, 5000);
+
+        img.onload = function () {
+            clearTimeout(timeout);
+            console.log('✅ Imagen cargada con fallback');
+            ctx.clearRect(0, 0, firmaCanvas.width, firmaCanvas.height);
+            ctx.drawImage(img, 0, 0, firmaCanvas.width, firmaCanvas.height);
+
+            // 🔥 NUEVO: Marcar que hay una firma cargada
+            firmaCargada = true;
+            firmaRealizada = true;
+            verificarEstadoBoton();
+        };
+
+        img.onerror = function (err) {
+            clearTimeout(timeout);
+            console.error('❌ Error en fallback:', err);
+            limpiarFirma();
+        };
+
+        img.src = firmaUrl.includes('?') ? `${firmaUrl}&t=${timestamp}` : `${firmaUrl}?t=${timestamp}`;
+    }
+}
+
+function limpiarFirma() {
+    const ctx = firmaCanvas.getContext('2d');
+    ctx.clearRect(0, 0, firmaCanvas.width, firmaCanvas.height);
+    firmaRealizada = false;
+    firmaCargada = false; // 🔥 Resetear bandera de firma cargada
+    verificarEstadoBoton();
+
+    if (window.currentBlobUrl) {
+        URL.revokeObjectURL(window.currentBlobUrl);
+        window.currentBlobUrl = null;
+    }
+}
+
 let dibujando = false;
+let firmaCargada = false;
 const ctx = firma.getContext("2d");
 
 function iniciarDibujo(x, y) {
     dibujando = true;
+
+    if (firmaCargada) {
+        console.log('🖊️ Usuario empieza a dibujar - limpiando firma anterior');
+        ctx.clearRect(0, 0, firma.width, firma.height);
+        firmaCargada = false;
+        firmaRealizada = true;
+        verificarEstadoBoton();
+    }
+
     ctx.beginPath();
     ctx.moveTo(x, y);
 }
@@ -58,7 +189,7 @@ function dibujar(x, y) {
     ctx.beginPath();
     ctx.moveTo(x, y);
 
-    if (!firmaRealizada) {
+    if (!firmaRealizada && !firmaCargada) {
         firmaRealizada = true;
         verificarEstadoBoton();
     }
@@ -69,7 +200,6 @@ function terminarDibujo() {
     ctx.beginPath();
 }
 
-// Eventos del mouse
 firma.addEventListener("mousedown", (e) => {
     e.preventDefault();
     const rect = firma.getBoundingClientRect();
@@ -85,7 +215,6 @@ firma.addEventListener("mousemove", e => {
     dibujar(e.clientX - rect.left, e.clientY - rect.top);
 });
 
-// Eventos táctiles
 firma.addEventListener("touchstart", (e) => {
     e.preventDefault();
     const touch = e.touches[0];
@@ -105,14 +234,10 @@ firma.addEventListener("touchmove", (e) => {
     dibujar(touch.clientX - rect.left, touch.clientY - rect.top);
 });
 
-// Función para limpiar la firma
-function limpiarFirma() {
-    ctx.clearRect(0, 0, firma.width, firma.height);
-    firmaRealizada = false;
-    verificarEstadoBoton();
-}
+// ============================================
+// FUNCIONES PRINCIPALES
+// ============================================
 
-// Verificar estado del botón
 function verificarEstadoBoton() {
     const identificacionValida = documento.value.trim() !== '' && nombre.value !== '';
     const municipioValido = municipio.value.trim() !== '';
@@ -124,14 +249,11 @@ function verificarEstadoBoton() {
     }
 }
 
-// Evento para el campo municipio
 municipio.addEventListener("input", verificarEstadoBoton);
 
-// Evento para el botón guardar
 btnGuardar.addEventListener("click", async () => {
     if (btnGuardar.disabled) return;
 
-    // Deshabilitar botón mientras se procesa
     btnGuardar.disabled = true;
     btnGuardar.textContent = 'GUARDANDO...';
 
@@ -139,10 +261,10 @@ btnGuardar.addEventListener("click", async () => {
         const datosFormulario = {
             identificacion: documento.value.trim(),
             nombre_completo: nombre.value.trim(),
-            lugar_expedicion: lugarExp.value.trim() || null, // Enviar null si está vacío
-            ciudad_firma: municipio.value.trim(), // Cambiado de 'municipio' a 'ciudad_firma' como espera el backend
+            lugar_expedicion: lugarExp.value.trim() || null,
+            ciudad_firma: municipio.value.trim(),
             fecha_firma: new Date().toISOString(),
-            firmaBase64: firma.toDataURL('image/png') // El backend espera 'firmaBase64'
+            firmaBase64: firma.toDataURL('image/png')
         };
 
         console.log('📤 Enviando datos al servidor...', datosFormulario);
@@ -163,20 +285,14 @@ btnGuardar.addEventListener("click", async () => {
 
         if (resultado.success) {
             console.log('✅ Respuesta del servidor:', resultado);
-
-            // Mostrar mensaje de éxito
             alert('✅ ¡Autorización guardada exitosamente!');
-
-            // Mostrar las URLs generadas en consola
             console.log('📎 URL de la firma:', resultado.data.firmaUrl);
             console.log('📄 URL del documento PDF:', resultado.data.pdfUrl);
 
-            // Preguntar si quiere ver el PDF
             if (confirm('¿Deseas ver el documento PDF generado?')) {
                 window.open(resultado.data.pdfUrl, '_blank');
             }
 
-            // Limpiar el formulario
             documento.value = '';
             nombre.value = '';
             lugarExp.value = '';
@@ -208,12 +324,17 @@ async function obtenerUsuarios() {
         const response = await res.json();
 
         if (response.success && Array.isArray(response.data)) {
-            // IMPORTANTE: El backend devuelve 'identification' (con 'i') no 'identificacion' (con 'c')
             usuarios = response.data.reduce((acc, empleado) => {
-                acc[empleado.identification] = empleado; // Usar 'identification' como viene del backend
+                acc[empleado.identificacion] = empleado;
                 return acc;
             }, {});
             console.log('✅ Usuarios cargados:', Object.keys(usuarios).length);
+
+            // 👀 Verificar si el primer usuario tiene firma_url
+            if (response.data.length > 0) {
+                console.log('📋 Ejemplo - usuario:', response.data[0].identificacion);
+                console.log('📋 firma_url:', response.data[0].firma_url);
+            }
         }
 
     } catch (error) {
@@ -234,17 +355,32 @@ async function buscarEmpleadoPorIdentificacion(identificacion) {
 
         if (response.success && response.data) {
             const empleado = response.data;
+            console.log('📋 Empleado encontrado:', empleado);
+
             nombre.value = empleado.nombre_completo || '';
             lugarExp.value = empleado.lugar_expedicion || '';
+
+            // 🔥 Guardar en caché
             usuarios[identificacion] = empleado;
+
+            // 🔥 Verificar si tiene firma_url
+            if (empleado.firma_url) {
+                console.log('✅ Firma encontrada:', empleado.firma_url);
+                cargarFirmaDesdeDatos(empleado.firma_url);
+            } else {
+                console.log('ℹ️ No hay firma guardada');
+                limpiarFirma();
+            }
+
             firma.style.pointerEvents = "auto";
-            console.log('✅ Empleado encontrado:', empleado);
+            console.log('✅ Empleado cargado correctamente');
         } else {
             console.log('⚠️ Empleado no encontrado');
             nombre.value = "";
             lugarExp.value = "";
+            limpiarFirma();
             firma.style.pointerEvents = "none";
-            firmaRealizada = false;
+            alert('⚠️ El número de identificación no está registrado en el sistema');
         }
 
         verificarEstadoBoton();
@@ -253,13 +389,13 @@ async function buscarEmpleadoPorIdentificacion(identificacion) {
         console.error('❌ Error al buscar empleado:', error);
         nombre.value = "";
         lugarExp.value = "";
+        limpiarFirma();
         firma.style.pointerEvents = "none";
-        firmaRealizada = false;
         verificarEstadoBoton();
+        alert('❌ Error al buscar el empleado: ' + error.message);
     }
 }
 
-// Función adicional para ver el estado de salud del servidor
 async function checkServerHealth() {
     try {
         const res = await fetch(`${API_BASE_URL}/health`);
@@ -272,9 +408,8 @@ async function checkServerHealth() {
     }
 }
 
-// Verificar conexión al iniciar
 checkServerHealth().then(isAlive => {
     if (!isAlive) {
-        console.warn('⚠️ El servidor no está respondiendo. Verifica que el backend esté corriendo en http://localhost:8080');
+        console.warn('⚠️ El servidor no está respondiendo.');
     }
 });
