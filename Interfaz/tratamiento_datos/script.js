@@ -1,4 +1,3 @@
-// script.js
 
 const hoy = new Date();
 const meses = ["enero", "febrero", "marzo", "abril", "mayo", "junio",
@@ -10,14 +9,17 @@ anio.textContent = hoy.getFullYear();
 
 let usuarios = {};
 let firmaRealizada = false;
-let firmaCargada = false; // Se inicializa aquí para que esté disponible globalmente
+let firmaCargada = false;
 
 const btnGuardar = document.getElementById('btnGuardar');
 const firmaCanvas = document.getElementById('firma');
 const ctx = firma.getContext("2d");
 
-const API_BASE_URL = 'https://digital-tratamiento-datos-594761951101.europe-west1.run.app/api';
-// const API_BASE_URL = 'http://localhost:8080/api';
+const API_BASE_URL = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
+    ? 'http://localhost:8080/api'
+    : 'https://digital-tratamiento-datos-594761951101.europe-west1.run.app/api';
+
+console.log('🌐 API Base URL:', API_BASE_URL);
 
 
 document.addEventListener('DOMContentLoaded', async () => {
