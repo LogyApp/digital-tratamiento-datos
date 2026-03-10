@@ -6,7 +6,7 @@ class EmployeeService {
     async getAllEmployees() {
         try {
             const [rows] = await pool.query(
-                'SELECT id, identificacion, nombre_completo, lugar_expedicion, firma_url FROM Digital_TD'
+                'SELECT id, identificacion, nombre_completo, lugar_expedicion, ciudad_firma, firma_url FROM Digital_TD'
             );
             return rows;
         } catch (error) {

@@ -10,12 +10,14 @@ anio.textContent = hoy.getFullYear();
 
 let usuarios = {};
 let firmaRealizada = false;
+let firmaCargada = false; // Se inicializa aquí para que esté disponible globalmente
 
 const btnGuardar = document.getElementById('btnGuardar');
 const firmaCanvas = document.getElementById('firma');
+const ctx = firma.getContext("2d");
 
 const API_BASE_URL = 'https://digital-tratamiento-datos-594761951101.europe-west1.run.app/api';
-// 'http://localhost:8080/api'
+// const API_BASE_URL = 'http://localhost:8080/api';
 
 
 document.addEventListener('DOMContentLoaded', async () => {
@@ -32,7 +34,12 @@ documento.addEventListener("change", async () => {
             nombre.value = usuario.nombre_completo || '';
             lugarExp.value = usuario.lugar_expedicion || '';
 
-            // 🔥 DIRECTAMENTE verificamos si tiene firma_url
+            municipio.value = usuario.ciudad_firma || '';
+
+            if (usuario.ciudad_firma) {
+                console.log('🏙️ Ciudad precargada:', usuario.ciudad_firma);
+            }
+
             if (usuario.firma_url) {
                 console.log('✅ Firma encontrada:', usuario.firma_url);
                 cargarFirmaDesdeDatos(usuario.firma_url);
@@ -49,6 +56,7 @@ documento.addEventListener("change", async () => {
     } else {
         nombre.value = "";
         lugarExp.value = "";
+        municipio.value = "";
         limpiarFirma();
         firma.style.pointerEvents = "none";
         firmaRealizada = false;
@@ -96,9 +104,8 @@ async function cargarFirmaDesdeDatos(firmaUrl) {
             ctx.drawImage(img, 0, 0, firmaCanvas.width, firmaCanvas.height);
             URL.revokeObjectURL(blobUrl);
 
-            // 🔥 NUEVO: Marcar que hay una firma cargada (no dibujada por el usuario)
             firmaCargada = true;
-            firmaRealizada = true; // La firma existe (aunque sea cargada)
+            firmaRealizada = true;
             verificarEstadoBoton();
         };
 
@@ -132,7 +139,6 @@ async function cargarFirmaDesdeDatos(firmaUrl) {
             ctx.clearRect(0, 0, firmaCanvas.width, firmaCanvas.height);
             ctx.drawImage(img, 0, 0, firmaCanvas.width, firmaCanvas.height);
 
-            // 🔥 NUEVO: Marcar que hay una firma cargada
             firmaCargada = true;
             firmaRealizada = true;
             verificarEstadoBoton();
@@ -152,7 +158,7 @@ function limpiarFirma() {
     const ctx = firmaCanvas.getContext('2d');
     ctx.clearRect(0, 0, firmaCanvas.width, firmaCanvas.height);
     firmaRealizada = false;
-    firmaCargada = false; // 🔥 Resetear bandera de firma cargada
+    firmaCargada = false;
     verificarEstadoBoton();
 
     if (window.currentBlobUrl) {
@@ -162,8 +168,6 @@ function limpiarFirma() {
 }
 
 let dibujando = false;
-let firmaCargada = false;
-const ctx = firma.getContext("2d");
 
 function iniciarDibujo(x, y) {
     dibujando = true;
@@ -330,7 +334,6 @@ async function obtenerUsuarios() {
             }, {});
             console.log('✅ Usuarios cargados:', Object.keys(usuarios).length);
 
-            // 👀 Verificar si el primer usuario tiene firma_url
             if (response.data.length > 0) {
                 console.log('📋 Ejemplo - usuario:', response.data[0].identificacion);
                 console.log('📋 firma_url:', response.data[0].firma_url);
@@ -360,10 +363,14 @@ async function buscarEmpleadoPorIdentificacion(identificacion) {
             nombre.value = empleado.nombre_completo || '';
             lugarExp.value = empleado.lugar_expedicion || '';
 
-            // 🔥 Guardar en caché
+            municipio.value = empleado.ciudad_firma || '';
+
+            if (empleado.ciudad_firma) {
+                console.log('🏙️ Ciudad precargada:', empleado.ciudad_firma);
+            }
+
             usuarios[identificacion] = empleado;
 
-            // 🔥 Verificar si tiene firma_url
             if (empleado.firma_url) {
                 console.log('✅ Firma encontrada:', empleado.firma_url);
                 cargarFirmaDesdeDatos(empleado.firma_url);
@@ -378,6 +385,7 @@ async function buscarEmpleadoPorIdentificacion(identificacion) {
             console.log('⚠️ Empleado no encontrado');
             nombre.value = "";
             lugarExp.value = "";
+            municipio.value = "";
             limpiarFirma();
             firma.style.pointerEvents = "none";
             alert('⚠️ El número de identificación no está registrado en el sistema');
@@ -389,6 +397,7 @@ async function buscarEmpleadoPorIdentificacion(identificacion) {
         console.error('❌ Error al buscar empleado:', error);
         nombre.value = "";
         lugarExp.value = "";
+        municipio.value = "";
         limpiarFirma();
         firma.style.pointerEvents = "none";
         verificarEstadoBoton();
