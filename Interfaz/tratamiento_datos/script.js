@@ -1,7 +1,13 @@
-
+// ============================================
+// CONFIGURACIÓN INICIAL
+// ============================================
 const hoy = new Date();
 const meses = ["enero", "febrero", "marzo", "abril", "mayo", "junio",
     "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre"];
+
+const dia = document.getElementById('dia');
+const mes = document.getElementById('mes');
+const anio = document.getElementById('anio');
 
 dia.textContent = hoy.getDate();
 mes.textContent = meses[hoy.getMonth()];
@@ -13,7 +19,7 @@ let firmaCargada = false;
 
 const btnGuardar = document.getElementById('btnGuardar');
 const firmaCanvas = document.getElementById('firma');
-const ctx = firma.getContext("2d");
+const ctx = firmaCanvas.getContext("2d");
 
 const API_BASE_URL = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
     ? 'http://localhost:8080/api'
@@ -21,50 +27,81 @@ const API_BASE_URL = window.location.hostname === 'localhost' || window.location
 
 console.log('🌐 API Base URL:', API_BASE_URL);
 
+// CARGAR CLÁUSULA DESDE EL BUCKET - CON FORMATO
+// ============================================
+async function cargarClausula() {
+    const contenedor = document.getElementById('contenido-clausula');
+    if (!contenedor) return;
 
-document.addEventListener('DOMContentLoaded', async () => {
-    await obtenerUsuarios();
-    verificarEstadoBoton();
-});
+    try {
+        console.log('📖 Cargando cláusula desde el bucket...');
+        const response = await fetch(`${API_BASE_URL}/clausula/ultima`);
+        const data = await response.json();
 
-documento.addEventListener("change", async () => {
-    const identificacion = documento.value.trim();
+        if (data.success) {
+            localStorage.setItem('versionClausula', data.version);
 
-    if (identificacion) {
-        if (usuarios[identificacion]) {
-            const usuario = usuarios[identificacion];
-            nombre.value = usuario.nombre_completo || '';
-            lugarExp.value = usuario.lugar_expedicion || '';
+            // Procesar el texto con formato mejorado
+            const texto = data.contenido;
 
-            municipio.value = usuario.ciudad_firma || '';
+            // 1. Dividir por líneas
+            const lineas = texto.split('\n');
 
-            if (usuario.ciudad_firma) {
-                console.log('🏙️ Ciudad precargada:', usuario.ciudad_firma);
-            }
+            let html = '';
+            let enListaNumerada = false;
 
-            if (usuario.firma_url) {
-                console.log('✅ Firma encontrada:', usuario.firma_url);
-                cargarFirmaDesdeDatos(usuario.firma_url);
-            } else {
-                console.log('ℹ️ No hay firma guardada');
-                limpiarFirma();
-            }
+            lineas.forEach(linea => {
+                const trimmed = linea.trim();
+                if (!trimmed) {
+                    // Línea vacía = separador
+                    if (enListaNumerada) {
+                        enListaNumerada = false;
+                    }
+                    return;
+                }
 
-            firma.style.pointerEvents = "auto";
-            verificarEstadoBoton();
-        } else {
-            await buscarEmpleadoPorIdentificacion(identificacion);
+                // Detectar si es un título (todo en mayúsculas o con "B.")
+                if (trimmed.match(/^[A-Z\s]+$/) || trimmed.match(/^[A-Z]\.\s/)) {
+                    html += `<h4 class="clausula-titulo">${trimmed}</h4>`;
+                }
+                // Detectar puntos numerados (1., 2., etc)
+                else if (trimmed.match(/^\d+\./)) {
+                    html += `<p class="clausula-numerada">${trimmed}</p>`;
+                    enListaNumerada = true;
+                }
+                // Detectar viñetas o guiones
+                else if (trimmed.match(/^[•\-]/)) {
+                    html += `<p class="clausula-vineta">${trimmed}</p>`;
+                }
+                // Texto normal
+                else {
+                    // Si estamos en medio de una lista numerada, mantener indentación
+                    const clase = enListaNumerada ? 'clausula-continuacion' : 'clausula-parrafo';
+                    html += `<p class="${clase}">${trimmed}</p>`;
+                }
+            });
+
+            contenedor.innerHTML = html;
+            console.log(`✅ Cláusula versión ${data.version} cargada`);
         }
-    } else {
-        nombre.value = "";
-        lugarExp.value = "";
-        municipio.value = "";
-        limpiarFirma();
-        firma.style.pointerEvents = "none";
-        firmaRealizada = false;
-        verificarEstadoBoton();
+
+    } catch (error) {
+        console.error('❌ Error:', error);
+        contenedor.innerHTML = `<p class="error">Error al cargar la cláusula</p>`;
     }
-});
+}
+
+function limpiarFirma() {
+    ctx.clearRect(0, 0, firmaCanvas.width, firmaCanvas.height);
+    firmaRealizada = false;
+    firmaCargada = false;
+    verificarEstadoBoton();
+
+    if (window.currentBlobUrl) {
+        URL.revokeObjectURL(window.currentBlobUrl);
+        window.currentBlobUrl = null;
+    }
+}
 
 async function cargarFirmaDesdeDatos(firmaUrl) {
     if (!firmaUrl) {
@@ -156,19 +193,9 @@ async function cargarFirmaDesdeDatos(firmaUrl) {
     }
 }
 
-function limpiarFirma() {
-    const ctx = firmaCanvas.getContext('2d');
-    ctx.clearRect(0, 0, firmaCanvas.width, firmaCanvas.height);
-    firmaRealizada = false;
-    firmaCargada = false;
-    verificarEstadoBoton();
-
-    if (window.currentBlobUrl) {
-        URL.revokeObjectURL(window.currentBlobUrl);
-        window.currentBlobUrl = null;
-    }
-}
-
+// ============================================
+// EVENTOS DE FIRMA
+// ============================================
 let dibujando = false;
 
 function iniciarDibujo(x, y) {
@@ -176,7 +203,7 @@ function iniciarDibujo(x, y) {
 
     if (firmaCargada) {
         console.log('🖊️ Usuario empieza a dibujar - limpiando firma anterior');
-        ctx.clearRect(0, 0, firma.width, firma.height);
+        ctx.clearRect(0, 0, firmaCanvas.width, firmaCanvas.height);
         firmaCargada = false;
         firmaRealizada = true;
         verificarEstadoBoton();
@@ -206,44 +233,43 @@ function terminarDibujo() {
     ctx.beginPath();
 }
 
-firma.addEventListener("mousedown", (e) => {
+firmaCanvas.addEventListener("mousedown", (e) => {
     e.preventDefault();
-    const rect = firma.getBoundingClientRect();
+    const rect = firmaCanvas.getBoundingClientRect();
     iniciarDibujo(e.clientX - rect.left, e.clientY - rect.top);
 });
 
-firma.addEventListener("mouseup", terminarDibujo);
-firma.addEventListener("mouseleave", terminarDibujo);
+firmaCanvas.addEventListener("mouseup", terminarDibujo);
+firmaCanvas.addEventListener("mouseleave", terminarDibujo);
 
-firma.addEventListener("mousemove", e => {
+firmaCanvas.addEventListener("mousemove", e => {
     e.preventDefault();
-    const rect = firma.getBoundingClientRect();
+    const rect = firmaCanvas.getBoundingClientRect();
     dibujar(e.clientX - rect.left, e.clientY - rect.top);
 });
 
-firma.addEventListener("touchstart", (e) => {
+firmaCanvas.addEventListener("touchstart", (e) => {
     e.preventDefault();
     const touch = e.touches[0];
-    const rect = firma.getBoundingClientRect();
+    const rect = firmaCanvas.getBoundingClientRect();
     iniciarDibujo(touch.clientX - rect.left, touch.clientY - rect.top);
 });
 
-firma.addEventListener("touchend", (e) => {
+firmaCanvas.addEventListener("touchend", (e) => {
     e.preventDefault();
     terminarDibujo();
 });
 
-firma.addEventListener("touchmove", (e) => {
+firmaCanvas.addEventListener("touchmove", (e) => {
     e.preventDefault();
     const touch = e.touches[0];
-    const rect = firma.getBoundingClientRect();
+    const rect = firmaCanvas.getBoundingClientRect();
     dibujar(touch.clientX - rect.left, touch.clientY - rect.top);
 });
 
 // ============================================
 // FUNCIONES PRINCIPALES
 // ============================================
-
 function verificarEstadoBoton() {
     const identificacionValida = documento.value.trim() !== '' && nombre.value !== '';
     const municipioValido = municipio.value.trim() !== '';
@@ -255,8 +281,63 @@ function verificarEstadoBoton() {
     }
 }
 
+// ============================================
+// EVENTOS DE FORMULARIO
+// ============================================
+const documento = document.getElementById('documento');
+const nombre = document.getElementById('nombre');
+const lugarExp = document.getElementById('lugarExp');
+const municipio = document.getElementById('municipio');
+
+document.addEventListener('DOMContentLoaded', async () => {
+    await cargarClausula(); // NUEVO: Cargar la cláusula al iniciar
+    await obtenerUsuarios();
+    verificarEstadoBoton();
+});
+
+documento.addEventListener("change", async () => {
+    const identificacion = documento.value.trim();
+
+    if (identificacion) {
+        if (usuarios[identificacion]) {
+            const usuario = usuarios[identificacion];
+            nombre.value = usuario.nombre_completo || '';
+            lugarExp.value = usuario.lugar_expedicion || '';
+            municipio.value = usuario.ciudad_firma || '';
+
+            if (usuario.ciudad_firma) {
+                console.log('🏙️ Ciudad precargada:', usuario.ciudad_firma);
+            }
+
+            if (usuario.firma_url) {
+                console.log('✅ Firma encontrada:', usuario.firma_url);
+                await cargarFirmaDesdeDatos(usuario.firma_url);
+            } else {
+                console.log('ℹ️ No hay firma guardada');
+                limpiarFirma();
+            }
+
+            firmaCanvas.style.pointerEvents = "auto";
+            verificarEstadoBoton();
+        } else {
+            await buscarEmpleadoPorIdentificacion(identificacion);
+        }
+    } else {
+        nombre.value = "";
+        lugarExp.value = "";
+        municipio.value = "";
+        limpiarFirma();
+        firmaCanvas.style.pointerEvents = "none";
+        firmaRealizada = false;
+        verificarEstadoBoton();
+    }
+});
+
 municipio.addEventListener("input", verificarEstadoBoton);
 
+// ============================================
+// GUARDAR AUTORIZACIÓN
+// ============================================
 btnGuardar.addEventListener("click", async () => {
     if (btnGuardar.disabled) return;
 
@@ -270,7 +351,8 @@ btnGuardar.addEventListener("click", async () => {
             lugar_expedicion: lugarExp.value.trim() || null,
             ciudad_firma: municipio.value.trim(),
             fecha_firma: new Date().toISOString(),
-            firmaBase64: firma.toDataURL('image/png')
+            firmaBase64: firmaCanvas.toDataURL('image/png'),
+            version_clausula: localStorage.getItem('versionClausula') || 'v1.0' // NUEVO: Versión de la cláusula
         };
 
         console.log('📤 Enviando datos al servidor...', datosFormulario);
@@ -292,10 +374,10 @@ btnGuardar.addEventListener("click", async () => {
         if (resultado.success) {
             console.log('✅ Respuesta del servidor:', resultado);
             alert('✅ ¡Autorización guardada exitosamente!');
-            console.log('📎 URL de la firma:', resultado.data.firmaUrl);
-            console.log('📄 URL del documento PDF:', resultado.data.pdfUrl);
+            console.log('📎 URL de la firma:', resultado.data?.firmaUrl);
+            console.log('📄 URL del documento PDF:', resultado.data?.pdfUrl);
 
-            if (confirm('¿Deseas ver el documento PDF generado?')) {
+            if (resultado.data?.pdfUrl && confirm('¿Deseas ver el documento PDF generado?')) {
                 window.open(resultado.data.pdfUrl, '_blank');
             }
 
@@ -318,6 +400,9 @@ btnGuardar.addEventListener("click", async () => {
     }
 });
 
+// ============================================
+// FUNCIONES DE USUARIOS
+// ============================================
 async function obtenerUsuarios() {
     try {
         console.log('📡 Cargando usuarios...');
@@ -364,7 +449,6 @@ async function buscarEmpleadoPorIdentificacion(identificacion) {
 
             nombre.value = empleado.nombre_completo || '';
             lugarExp.value = empleado.lugar_expedicion || '';
-
             municipio.value = empleado.ciudad_firma || '';
 
             if (empleado.ciudad_firma) {
@@ -375,13 +459,13 @@ async function buscarEmpleadoPorIdentificacion(identificacion) {
 
             if (empleado.firma_url) {
                 console.log('✅ Firma encontrada:', empleado.firma_url);
-                cargarFirmaDesdeDatos(empleado.firma_url);
+                await cargarFirmaDesdeDatos(empleado.firma_url);
             } else {
                 console.log('ℹ️ No hay firma guardada');
                 limpiarFirma();
             }
 
-            firma.style.pointerEvents = "auto";
+            firmaCanvas.style.pointerEvents = "auto";
             console.log('✅ Empleado cargado correctamente');
         } else {
             console.log('⚠️ Empleado no encontrado');
@@ -389,7 +473,7 @@ async function buscarEmpleadoPorIdentificacion(identificacion) {
             lugarExp.value = "";
             municipio.value = "";
             limpiarFirma();
-            firma.style.pointerEvents = "none";
+            firmaCanvas.style.pointerEvents = "none";
             alert('⚠️ El número de identificación no está registrado en el sistema');
         }
 
@@ -401,12 +485,15 @@ async function buscarEmpleadoPorIdentificacion(identificacion) {
         lugarExp.value = "";
         municipio.value = "";
         limpiarFirma();
-        firma.style.pointerEvents = "none";
+        firmaCanvas.style.pointerEvents = "none";
         verificarEstadoBoton();
         alert('❌ Error al buscar el empleado: ' + error.message);
     }
 }
 
+// ============================================
+// HEALTH CHECK
+// ============================================
 async function checkServerHealth() {
     try {
         const res = await fetch(`${API_BASE_URL}/health`);
