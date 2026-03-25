@@ -3,6 +3,7 @@ import cors from 'cors';
 import bodyParser from 'body-parser';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import { readFileSync } from 'fs';
 
 import empleados from './Funcionalidad/tratamiento_datos_func/routes/routes_obtener_usuarios.js';
 import signature from './Funcionalidad/tratamiento_datos_func/routes/routes_signature.js';
@@ -15,6 +16,21 @@ import {
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
+
+// Configurar credenciales de Google Cloud
+if (process.env.NODE_ENV === 'production' && !process.env.GOOGLE_APPLICATION_CREDENTIALS) {
+    // En Cloud Run, usar las credenciales por defecto
+    console.log('☁️  Modo Cloud Run: usando credenciales por defecto');
+} else if (process.env.NODE_ENV !== 'production') {
+    // En local, usar el archivo de credenciales
+    try {
+        const credentialsPath = path.join(__dirname, 'gcs-key.json');
+        process.env.GOOGLE_APPLICATION_CREDENTIALS = credentialsPath;
+        console.log('🏠 Modo local: usando', credentialsPath);
+    } catch (error) {
+        console.warn('⚠️  No se encontró archivo de credenciales local');
+    }
+}
 
 const app = express();
 const port = process.env.PORT || 8080;
@@ -121,7 +137,12 @@ app.get('/api/health', (req, res) => {
         success: true,
         message: 'Servidor funcionando correctamente',
         timestamp: new Date(),
-        entorno: process.env.NODE_ENV || 'production'
+        entorno: process.env.NODE_ENV || 'production',
+        credentials: process.env.GOOGLE_APPLICATION_CREDENTIALS ? 'configuradas' : 'por defecto',
+        buckets: {
+            hojasVida: process.env.GCS_BUCKET_HOJAS_VIDA,
+            firmas: process.env.GCS_BUCKET_FIRMAS
+        }
     });
 });
 
@@ -132,6 +153,7 @@ app.get('/', (req, res) => {
     res.sendFile(path.join(__dirname, 'Interfaz/tratamiento_datos/index.html'));
 });
 
+// Solo ejecutar verificación de conexión en desarrollo
 if (process.env.NODE_ENV === 'development') {
     verificarConexion().catch(console.error);
 }
@@ -157,14 +179,23 @@ app.use((err, req, res, next) => {
     });
 });
 
-app.listen(port, () => {
+// Iniciar servidor
+const server = app.listen(port, '0.0.0.0', () => {
     console.log(`Servidor corriendo en puerto ${port}`);
     console.log(`Entorno: ${process.env.NODE_ENV || 'production'}`);
-    console.log(`Bucket: clausulas-logyser`);
+    console.log(`Bucket: ${process.env.GCS_BUCKET_HOJAS_VIDA || 'no configurado'}`);
     console.log(`Endpoints:`);
     console.log(`   - GET  /api/health`);
     console.log(`   - GET  /api/clausula/ultima`);
     console.log(`   - GET  /api/clausula/:version`);
     console.log(`   - GET  /api/clausula/versiones`);
     console.log(`   - POST /api/clausula/guardar`);
+});
+
+// Manejar cierre graceful
+process.on('SIGTERM', () => {
+    console.log('SIGTERM signal received: closing HTTP server');
+    server.close(() => {
+        console.log('HTTP server closed');
+    });
 });

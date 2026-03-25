@@ -8,6 +8,13 @@ RUN apt-get update && apt-get install -y \
     ca-certificates \
     procps \
     libxss1 \
+    libxtst6 \
+    libxrandr2 \
+    libasound2 \
+    libatk-bridge2.0-0 \
+    libgtk-3-0 \
+    libgbm1 \
+    libnss3 \
     && wget -q -O - https://dl-ssl.google.com/linux/linux_signing_key.pub | apt-key add - \
     && sh -c 'echo "deb [arch=amd64] http://dl.google.com/linux/chrome/deb/ stable main" >> /etc/apt/sources.list.d/google.list' \
     && apt-get update \
@@ -22,24 +29,25 @@ WORKDIR /app
 COPY package*.json ./
 
 # Instalar dependencias
-RUN npm ci --only=production
+RUN npm ci --only=production || npm install --only=production
 
 # Copiar el código de la aplicación
 COPY . .
 
-# Crear directorio para templates si no existe
-RUN mkdir -p Funcionalidad/tratamiento_datos_func/templates
+# NO copiar archivos de credenciales locales
+# Si tienes gcs-key.json, asegúrate de que esté en .dockerignore
 
-# Copiar templates desde Interfaz
-COPY Interfaz/tratamiento_datos/templates/* Funcionalidad/tratamiento_datos_func/templates/
-COPY Interfaz/tratamiento_datos/assets/* Interfaz/tratamiento_datos/assets/
-
-# Establecer variable de entorno para Puppeteer
+# Establecer variables de entorno
 ENV PUPPETEER_EXECUTABLE_PATH=/usr/bin/google-chrome-stable
 ENV NODE_ENV=production
+ENV PORT=8080
 
 # Exponer puerto
 EXPOSE 8080
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=3s --start-period=40s --retries=3 \
+    CMD node -e "require('http').get('http://localhost:8080/api/health', (r) => {r.statusCode === 200 ? process.exit(0) : process.exit(1)}).on('error', () => process.exit(1))"
 
 # Comando para iniciar la aplicación
 CMD ["node", "server.js"]
