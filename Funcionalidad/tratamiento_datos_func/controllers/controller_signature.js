@@ -1,6 +1,6 @@
 import employeeService from '../services/service_obtener_usuarios.js';
 import storageService from '../services/service_cloud_storage.js';
-import htmlToPdfService from '../services/service_html_to_pdf.js'; // Cambiado de pdfService a htmlToPdfService
+import htmlToPdfService from '../services/service_html_to_pdf.js';
 
 class SignatureController {
     async saveSignature(req, res) {
@@ -14,7 +14,6 @@ class SignatureController {
                 fecha_firma
             } = req.body;
 
-            // VALIDACIÓN ESTRICTA
             if (!identificacion || !nombre_completo || !ciudad_firma || !firmaBase64) {
                 return res.status(400).json({
                     success: false,
@@ -31,13 +30,13 @@ class SignatureController {
                 fecha_firma: fecha_firma || new Date().toISOString()
             });
 
-            // PASO 1: Subir la firma
-            console.log('1️⃣ Subiendo firma...');
+            // PASO 1: Subir la firma → bucket [firmas-images]
+            console.log('1️⃣ Subiendo firma a firmas-images...');
             const firmaBuffer = Buffer.from(firmaBase64.split(',')[1], 'base64');
             const firmaUrl = await storageService.uploadSignature(identificacion, firmaBuffer);
             console.log('✅ Firma URL:', firmaUrl);
 
-            // PASO 2: Generar PDF usando HTML + CSS (manteniendo el diseño exacto)
+            // PASO 2: Generar PDF
             console.log('2️⃣ Generando PDF desde plantilla HTML...');
             const pdfBuffer = await htmlToPdfService.generatePDF({
                 identificacion,
@@ -49,22 +48,20 @@ class SignatureController {
             });
             console.log(`✅ PDF generado: ${pdfBuffer.length} bytes`);
 
-            // PASO 3: Subir PDF
-            console.log('3️⃣ Subiendo PDF a GCS...');
+            // PASO 3: Subir PDF → bucket [hojas_vida_logyser]
+            console.log('3️⃣ Subiendo PDF a hojas_vida_logyser...');
             const pdfUrl = await storageService.uploadDocument(identificacion, pdfBuffer);
             console.log('✅ PDF URL:', pdfUrl);
 
-            // PASO 4: VERIFICAR si el empleado existe
+            // PASO 4: Verificar si el empleado existe en BD
             console.log('4️⃣ Verificando empleado en BD...');
             const empleadoExistente = await employeeService.getEmployeeByIdentificacion(identificacion);
 
             if (empleadoExistente) {
-                // ACTUALIZAR URLs
                 console.log('🔄 Actualizando empleado existente...');
                 await employeeService.updateEmployeeSignatureUrl(identificacion, firmaUrl);
                 await employeeService.updateEmployeeDocumentUrl(identificacion, pdfUrl);
 
-                // ACTUALIZAR lugar_expedicion y ciudad_firma si están vacíos
                 if (!empleadoExistente.lugar_expedicion && lugar_expedicion) {
                     console.log('📍 Actualizando ubicación del empleado...');
                     await employeeService.updateEmployeeLocation(identificacion, {
@@ -73,7 +70,6 @@ class SignatureController {
                     });
                 }
             } else {
-                // CREAR NUEVO registro con TODO
                 console.log('🆕 Creando nuevo registro en BD...');
                 const nuevoId = await employeeService.createSignatureRecord({
                     identificacion,
@@ -87,16 +83,16 @@ class SignatureController {
                 console.log('✅ Nuevo registro creado con ID:', nuevoId);
             }
 
-            // VERIFICAR que se guardó correctamente
+            // Verificación final
             const verificar = await employeeService.getEmployeeByIdentificacion(identificacion);
             console.log('✅ REGISTRO FINAL EN BD:', {
                 lugar_expedicion: verificar?.lugar_expedicion,
                 ciudad_firma: verificar?.ciudad_firma,
-                firma_url: verificar?.firma_url ? verificar.firma_url.substring(0, 50) + '...' : null,
-                url_td: verificar?.url_td ? verificar.url_td.substring(0, 50) + '...' : null
+                // Muestra el bucket correcto en el log para confirmar
+                firma_url: verificar?.firma_url ? verificar.firma_url.substring(0, 60) + '...' : null,
+                url_td: verificar?.url_td ? verificar.url_td.substring(0, 60) + '...' : null
             });
 
-            // Respuesta exitosa
             res.json({
                 success: true,
                 message: 'Autorización guardada exitosamente',
@@ -132,20 +128,27 @@ class SignatureController {
             }
 
             console.log(`📂 Obteniendo archivos para: ${identification}`);
-            const files = await storageService.listUserFiles(identification);
 
-            // Generar URLs firmadas si el bucket no es público
-            // const filesWithUrls = await Promise.all(files.map(async (file) => {
-            //     const signedUrl = await storageService.getSignedUrl(
-            //         `doc_digital_seleccion/${identification}/${file.name}`,
-            //         60
-            //     );
-            //     return { ...file, url: signedUrl };
-            // }));
+            // Se consultan ambos buckets por separado
+            const [firma, documento] = await Promise.allSettled([
+                storageService.fileExists(identification, `firma_${identification}.png`),
+                storageService.fileExists(identification, `autorizacion_${identification}.pdf`)
+            ]);
 
             res.json({
                 success: true,
-                data: files // o filesWithUrls si usas URLs firmadas
+                data: {
+                    firma: {
+                        bucket: 'firmas-images',
+                        exists: firma.status === 'fulfilled' ? firma.value : false,
+                        path: `${identification}/firma_${identification}.png`
+                    },
+                    documento: {
+                        bucket: 'hojas_vida_logyser',
+                        exists: documento.status === 'fulfilled' ? documento.value : false,
+                        path: `${identification}/autorizacion_${identification}.pdf`
+                    }
+                }
             });
 
         } catch (error) {
@@ -157,32 +160,37 @@ class SignatureController {
         }
     }
 
-    // Método adicional para verificar el estado del servicio
     async healthCheck(req, res) {
         try {
             const services = {
                 database: false,
-                storage: false,
+                storage_firmas: false,
+                storage_documentos: false,
                 pdfGenerator: false
             };
 
-            // Verificar BD
             try {
-                const testQuery = await employeeService.getEmployeeByIdentificacion('test');
+                await employeeService.getEmployeeByIdentificacion('test');
                 services.database = true;
             } catch (e) {
                 console.error('BD no disponible:', e.message);
             }
 
-            // Verificar Storage
+            // Verifica ambos buckets de forma independiente
             try {
-                const testFile = await storageService.fileExists('test', 'test.txt');
-                services.storage = true;
+                await storageService.fileExists('test', `firma_test.png`);
+                services.storage_firmas = true;
             } catch (e) {
-                console.error('Storage no disponible:', e.message);
+                console.error('Bucket firmas-images no disponible:', e.message);
             }
 
-            // Verificar generador PDF
+            try {
+                await storageService.fileExists('test', `autorizacion_test.pdf`);
+                services.storage_documentos = true;
+            } catch (e) {
+                console.error('Bucket hojas_vida_logyser no disponible:', e.message);
+            }
+
             try {
                 const testPdf = await htmlToPdfService.generatePDF({
                     identificacion: 'TEST',

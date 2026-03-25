@@ -1,20 +1,17 @@
-import bucket from '../../../config/storage.js';
+import { bucketHojasVida, bucketFirmas } from '../../../config/storage.js';
 
 class StorageService {
 
-    async uploadFile(fileBuffer, destinationPath, contentType) {
+    async uploadFile(bucket, fileBuffer, destinationPath, contentType) {
         try {
             const file = bucket.file(destinationPath);
 
             await file.save(fileBuffer, {
-                metadata: {
-                    contentType
-                },
+                metadata: { contentType },
                 resumable: false
             });
 
             const publicUrl = `https://storage.googleapis.com/${bucket.name}/${destinationPath}`;
-
             console.log(`✅ Archivo subido: ${publicUrl}`);
             return publicUrl;
 
@@ -24,7 +21,27 @@ class StorageService {
         }
     }
 
-    async getSignedUrl(filePath, expiresInMinutes = 60) {
+    async uploadSignature(identification, signatureBuffer) {
+        const destinationPath = `${identification}/firma_${identification}.png`;
+        return await this.uploadFile(
+            bucketFirmas,
+            signatureBuffer,
+            destinationPath,
+            'image/png'
+        );
+    }
+
+    async uploadDocument(identification, pdfBuffer) {
+        const destinationPath = `${identification}/autorizacion_${identification}.pdf`;
+        return await this.uploadFile(
+            bucketHojasVida,
+            pdfBuffer,
+            destinationPath,
+            'application/pdf'
+        );
+    }
+
+    async getSignedUrl(bucket, filePath, expiresInMinutes = 60) {
         try {
             const file = bucket.file(filePath);
             const [url] = await file.getSignedUrl({
@@ -34,32 +51,37 @@ class StorageService {
             });
             return url;
         } catch (error) {
-            console.error('Error al generar URL firmada:', error);
+            console.error('❌ Error al generar URL firmada:', error);
             throw error;
         }
     }
 
-    async uploadSignature(identification, signatureBuffer) {
-        const fileName = `doc_digital_seleccion/${identification}/firma_${Date.now()}.png`;
-        return await this.uploadFile(signatureBuffer, fileName, 'image/png');
+    async getSignedUrlDocument(identification, expiresInMinutes = 60) {
+        const filePath = `${identification}/autorizacion_${identification}.pdf`;
+        return await this.getSignedUrl(bucketHojasVida, filePath, expiresInMinutes);
     }
 
-    async uploadDocument(identification, pdfBuffer) {
-        const fileName = `doc_digital_seleccion/${identification}/autorizacion_${Date.now()}.pdf`;
-        return await this.uploadFile(pdfBuffer, fileName, 'application/pdf');
+    async getSignedUrlSignature(identification, expiresInMinutes = 60) {
+        const filePath = `${identification}/firma_${identification}.png`;
+        return await this.getSignedUrl(bucketFirmas, filePath, expiresInMinutes);
     }
 
-    async getSignedUrlForFile(identification, fileName, expiresInMinutes = 60) {
-        const filePath = `doc_digital_seleccion/${identification}/${fileName}`;
-        return await this.getSignedUrl(filePath, expiresInMinutes);
-    }
-
-    async fileExists(identification, fileName) {
+    async documentExists(identification) {
         try {
-            const file = bucket.file(`doc_digital_seleccion/${identification}/${fileName}`);
+            const file = bucketHojasVida.file(`${identification}/autorizacion_${identification}.pdf`);
             const [exists] = await file.exists();
             return exists;
-        } catch (error) {
+        } catch {
+            return false;
+        }
+    }
+
+    async signatureExists(identification) {
+        try {
+            const file = bucketFirmas.file(`${identification}/firma_${identification}.png`);
+            const [exists] = await file.exists();
+            return exists;
+        } catch {
             return false;
         }
     }
